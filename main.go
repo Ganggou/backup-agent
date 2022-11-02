@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -21,6 +22,8 @@ type BackupSettings struct {
 	Suffix     string `json:"suffix"`      // 备份文件后缀
 	Internal   int    `json:"internal"`    // 备份间隔 单位小时
 	Storage    int    `json:"storage"`     // 备份文件数量上限
+	Username   string `json:"username"`
+	Password   string `json:"password"`
 }
 
 func (b *BackupSettings) GetLocalFiles() (filenames []string, err error) {
@@ -41,11 +44,14 @@ func (b *BackupSettings) GetLocalFiles() (filenames []string, err error) {
 }
 
 func (b *BackupSettings) GetRemoteFiles() (filenames []string, err error) {
-	request, err := http.NewRequest(http.MethodGet, b.SourceAddr, nil)
+	req, err := http.NewRequest(http.MethodGet, b.SourceAddr, nil)
 	if err != nil {
 		return
 	}
-	resp, err := http.DefaultClient.Do(request)
+	if b.Username != "" && b.Password != "" {
+		req.Header.Add("Authorization", "Basic "+basicAuth(b.Username, b.Password))
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return
 	}
@@ -65,7 +71,7 @@ func (b *BackupSettings) GetRemoteFiles() (filenames []string, err error) {
 func (b *BackupSettings) DownloadFiles(filenames []string) (err error) {
 	for _, filename := range filenames {
 		log.Println("Start getting file " + filename)
-		_, itemErr := grab.Get(b.TargetPath+string(os.PathSeparator)+filename, b.SourceAddr+"/"+filename)
+		itemErr := b.DownloadFile(filename)
 		if itemErr != nil {
 			log.Printf("Fail to get file %s, err: %s \n", filename, itemErr)
 			deleteFile(b.TargetPath, filename)
@@ -77,6 +83,32 @@ func (b *BackupSettings) DownloadFiles(filenames []string) (err error) {
 		}
 	}
 	return
+}
+
+func (b *BackupSettings) DownloadFile(filename string) error {
+	client := grab.NewClient()
+	req, _ := grab.NewRequest(b.TargetPath+string(os.PathSeparator)+filename, b.SourceAddr+"/"+filename)
+
+	if b.Username != "" && b.Password != "" {
+		req.HTTPRequest.Header.Add("Authorization", "Basic "+basicAuth(b.Username, b.Password))
+	}
+	resp := client.Do(req)
+
+	// start UI loop
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
+
+	go func() {
+		for range t.C {
+			fmt.Printf(" transferred %s %v / %v bytes (%.2f%%)\n",
+				filename,
+				resp.BytesComplete(),
+				resp.Size(),
+				100*resp.Progress())
+		}
+	}()
+
+	return resp.Err()
 }
 
 func (b *BackupSettings) Run() {
@@ -129,6 +161,11 @@ func compareFiles(localFilenames, remoteFilenames []string) (incrementalFilename
 		}
 	}
 	return
+}
+
+func basicAuth(username, password string) string {
+	auth := username + ":" + password
+	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
 func main() {
