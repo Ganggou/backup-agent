@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -63,10 +64,13 @@ func (b *BackupSettings) GetRemoteFiles() (filenames []string, err error) {
 
 func (b *BackupSettings) DownloadFiles(filenames []string) (err error) {
 	for _, filename := range filenames {
+		log.Println("Start getting file " + filename)
 		_, itemErr := grab.Get(b.TargetPath+string(os.PathSeparator)+filename, b.SourceAddr+"/"+filename)
 		if itemErr != nil {
+			log.Printf("Fail to get file %s, err: %s \n", filename, itemErr)
 			deleteFile(b.TargetPath, filename)
-			log.Println(itemErr)
+		} else {
+			log.Println("Succeed to get file " + filename)
 		}
 		if err == nil {
 			err = itemErr
@@ -129,13 +133,15 @@ func compareFiles(localFilenames, remoteFilenames []string) (incrementalFilename
 
 func main() {
 	settings := make([]BackupSettings, 0)
-	configFile, err := os.Open("./config/config.json")
+	configFilename := os.Args[1]
+	configFile, err := os.Open(configFilename)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	byteValue, _ := ioutil.ReadAll(configFile)
 	json.Unmarshal(byteValue, &settings)
+	fmt.Println(settings)
 	for _, setting := range settings {
 		go func(s BackupSettings) {
 			s.Run()
