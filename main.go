@@ -20,6 +20,7 @@ type BackupSettings struct {
 	SourceAddr string `json:"source_addr"` // 文件系统地址
 	TargetPath string `json:"target_path"` // 本地备份地址
 	Suffix     string `json:"suffix"`      // 备份文件后缀
+	Regexp     string `json:"regexp"`      // 文件名正则规则
 	Internal   int    `json:"internal"`    // 备份间隔 单位小时
 	Storage    int    `json:"storage"`     // 备份文件数量上限
 	Username   string `json:"username"`
@@ -34,8 +35,10 @@ func (b *BackupSettings) GetLocalFiles() (filenames []string, err error) {
 
 	for _, fi := range dir {
 		// 过滤指定格式
-		if ok := strings.HasSuffix(fi.Name(), "."+b.Suffix); ok {
-			filenames = append(filenames, fi.Name())
+		filename := fi.Name()
+		suffixOk := strings.HasSuffix(filename, "."+b.Suffix)
+		if suffixOk && b.CheckRegexpMatch(filename) {
+			filenames = append(filenames, filename)
 		}
 	}
 
@@ -60,12 +63,24 @@ func (b *BackupSettings) GetRemoteFiles() (filenames []string, err error) {
 	matches := re.FindAllStringSubmatch(string(s), -1)
 	for _, match := range matches {
 		if len(match) == 2 {
-			filenames = append(filenames, match[1])
+			filename := match[1]
+			if b.CheckRegexpMatch(filename) {
+				filenames = append(filenames, filename)
+			}
 		}
 	}
 
 	sort.Strings(filenames)
 	return
+}
+
+func (b *BackupSettings) CheckRegexpMatch(filename string) bool {
+	match := true
+	if b.Regexp != "" {
+		re := regexp.MustCompile(b.Regexp)
+		match = re.MatchString(filename)
+	}
+	return match
 }
 
 func (b *BackupSettings) DownloadFiles(filenames []string) (err error) {
