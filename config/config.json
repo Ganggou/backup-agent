@@ -1,7 +1,12 @@
 [
     {
-        "source_addr": "",
-        "target_path": "",
-        "suffix": ""
+        "source_addr": "http://127.0.0.1:8089/SVN_Incremental_BackUp",
+        "target_path": "D:\\SVN Incremental BackUp",
+        "suffix": "vsvnbak",
+        "regexp": "incremental",
+        "internal": 1,
+        "storage": 60,
+        "username": "agent",
+        "password": "jinzhangshu@"
     }
 ]
